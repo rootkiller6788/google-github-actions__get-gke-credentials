@@ -23,6 +23,7 @@ import YAML from 'yaml';
 import { ClusterClient, ClusterResponse, KubeConfig } from '../src/client';
 
 import { skipIfMissingEnv } from '@google-github-actions/actions-utils';
+import { GaxiosOptions } from 'gaxios';
 
 const publicCluster: ClusterResponse = {
   name: 'public-cluster',
@@ -223,6 +224,17 @@ test('#discoverClusterMembership', { concurrency: true }, async (suite) => {
       expected: 'membershipName',
     },
     {
+      name: 'regional membership',
+      resp: {
+        resources: [
+          {
+            name: 'projects/foo/locations/us-central1/memberships/membershipName',
+          },
+        ],
+      },
+      expected: 'projects/foo/locations/us-central1/memberships/membershipName',
+    },
+    {
       name: 'empty',
       resp: {
         resources: [],
@@ -250,7 +262,9 @@ test('#discoverClusterMembership', { concurrency: true }, async (suite) => {
     await suite.test(tc.name, async (t) => {
       const client = new ClusterClient({ projectID: 'foo' });
 
-      t.mock.method(client.auth, 'request', async () => {
+      let requestedURL = '';
+      t.mock.method(client.auth, 'request', async (opts: GaxiosOptions) => {
+        requestedURL = String(opts.url);
         return { data: tc.resp };
       });
 
@@ -262,6 +276,15 @@ test('#discoverClusterMembership', { concurrency: true }, async (suite) => {
         const result = await client.discoverClusterMembership('projects/p/locations/l/clusters/c');
         assert.deepStrictEqual(result, tc.expected);
       }
+
+      // The lookup has to span every location, otherwise a membership in a
+      // region is never returned.
+      assert.ok(
+        requestedURL.startsWith(
+          'https://gkehub.googleapis.com/v1/projects/foo/locations/-/memberships',
+        ),
+        `expected a location-wide membership lookup, got ${requestedURL}`,
+      );
     });
   }
 });
