@@ -326,7 +326,11 @@ export class ClusterClient {
       );
     }
 
-    const url = `${this.hubEndpoint}/projects/${projectID}/locations/global/memberships?filter=endpoint.gkeCluster.resourceLink="${clusterResourceLink}"`;
+    // List across every location ("-") instead of just "global": clusters in a
+    // region are registered as a regional membership, so a global-only query
+    // never sees them. This matches what `gcloud container fleet memberships
+    // list` does when no --location is given.
+    const url = `${this.hubEndpoint}/projects/${projectID}/locations/-/memberships?filter=endpoint.gkeCluster.resourceLink="${clusterResourceLink}"`;
     const resp = await this.request<HubMembershipsResponse>({
       url: url,
     });
